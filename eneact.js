@@ -65,7 +65,7 @@ function login(user, callback){
 
 
 
-async function upload(user, activity, callback){
+async function upload(user, startcAtivity, stopActivity, callback){
 
     const loginOptions = {uri: loginAPI,jar: j,method: "POST",json: true,body: {login: user.email, password: user.password}, resolveWithFullResponse: true};
 
@@ -73,8 +73,8 @@ async function upload(user, activity, callback){
     .then( loginRes => {
         const cookie = j.getCookieString(loginAPI); 
         
-        const timestamp =  moment().format();
-        let uuid = uuidv4();
+        // const timestamp =  moment().format();
+        // let uuid = uuidv4();
         const version = '8.8';
         const type = 'label';
 
@@ -85,7 +85,7 @@ async function upload(user, activity, callback){
         
         let startBody = {
             filename: filename, type: type, version: version, 
-            data: `${timestamp},${activity.id},${activity.name},true,${user.id};,${uuid},`
+            data: `${startcAtivity.timestamp},${startcAtivity.id},${startcAtivity.name},true,${user.id};,${startcAtivity.uuid},`
         };
         const startOptions = {uri: uploadAPI, headers: {'cookie': cookie},method: "POST",json: true, body: startBody, resolveWithFullResponse: true};
 
@@ -96,7 +96,7 @@ async function upload(user, activity, callback){
 
             let stopBody = {
                 filename: filename, type: type, version: version, 
-                data: `${timestamp},${activity.id},${activity.name},false,${user.id};,${uuid},`
+                data: `${stopActivity.timestamp},${stopActivity.id},${stopActivity.name},false,${user.id};,${stopActivity.uuid},`
             };
             const stopOptions = {uri: uploadAPI, headers: {'cookie': cookie},method: "POST",json: true, body: stopBody, resolveWithFullResponse: true};
     

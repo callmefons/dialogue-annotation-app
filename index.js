@@ -4,6 +4,9 @@ const http = require('http');
 const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
+var _ = require('lodash');
+const moment = require('moment');
+const uuidv4 = require('uuid/v4');
 
 const expressApp = express();
 
@@ -54,15 +57,37 @@ app.intent('talk', async (conv, params) => {
 				};
 
 
-				await eneact.upload(user, activity, (error)=> {
-						
-					if(!error){
-						conv.ask(`Activity ${activity.name} added!  \n`);
-					}else{
-						conv.close(`Cannot upload ${error}`);
-					}
-				});
+				if (!Array.isArray(conv.user.storage.activities)){
+					conv.user.storage.activities = [{name: "", uuid: ""}];
+				}
+
+				//if user say the same activity again, it will automatically stop.
+				let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
+				if(recording === undefined) {
+					const uuid = uuidv4();
+					const timeStart =  moment().format();
+					let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
+					conv.user.storage.activities.push(startActivity);
+					conv.ask(`Start ${activity.name}`);
+				}else{
+
+					const timeStop =  moment().format()
+					let stopActivity = {id: activity.id, name: activity.name, uuid: recording.uuid, timestamp: timeStop}
+
+					await eneact.upload(user, recording, stopActivity, (error)=> {			
+						if(!error){
+							
+							conv.user.storage.activities = _.pullAllWith(conv.user.storage.activities, [recording], _.isEqual);
+							conv.ask(`Stop ${activity.name}  \n`);
+							
+						}else{
+							conv.close(`Cannot upload ${error}`);
+						}
+					});
+				}
 				
+			
+
 			}else{
 					conv.ask(`No acivity ${acivityParam} in DB`);
 			}
@@ -77,8 +102,12 @@ app.intent('talk', async (conv, params) => {
 
 app.intent('list', async (conv, params) => {
 
+});
 
-
+app.intent('clear', async (conv, params) => {
+	conv.user.storage.activities = {};
+	conv.user.storage.walk = {}
+	conv.ask(`conv.user.storage.activities ${conv.user.storage.activities}`)
 });
 
   

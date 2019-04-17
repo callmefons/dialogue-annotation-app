@@ -33,9 +33,9 @@ const eneact = require('./eneact');
 
 app.intent('talk', async (conv, params) => {
 	
-	if(conv.user.storage.email && conv.user.storage.password){
+	let action = params['action'];
 
-		const action = params['action'];
+	if(conv.user.storage.email && conv.user.storage.password){
 
 		for (let index in params['activity']) {
 	
@@ -61,29 +61,41 @@ app.intent('talk', async (conv, params) => {
 					conv.user.storage.activities = [{name: "", uuid: ""}];
 				}
 
-				//if user say the same activity again, it will automatically stop.
 				let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
 				if(recording === undefined) {
-					const uuid = uuidv4();
-					const timeStart =  moment().format();
-					let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
-					conv.user.storage.activities.push(startActivity);
-					conv.ask(`Start ${activity.name}`);
+
+					if(action === 'stop'){
+						conv.ask(`You have not stated ${activity.name} yet`)
+					}else{
+						const uuid = uuidv4();
+						const timeStart =  moment().format();
+						let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
+						conv.user.storage.activities.push(startActivity);
+						conv.ask(`${activity.name} is started`);
+					}
+				
 				}else{
 
-					const timeStop =  moment().format()
-					let stopActivity = {id: activity.id, name: activity.name, uuid: recording.uuid, timestamp: timeStop}
 
-					await eneact.upload(user, recording, stopActivity, (error)=> {			
-						if(!error){
-							
-							conv.user.storage.activities = _.pullAllWith(conv.user.storage.activities, [recording], _.isEqual);
-							conv.ask(`Stop ${activity.name}  \n`);
-							
-						}else{
-							conv.close(`Cannot upload ${error}`);
-						}
-					});
+					if(action === 'stop'){
+
+						const timeStop =  moment().format()
+						let stopActivity = {id: activity.id, name: activity.name, uuid: recording.uuid, timestamp: timeStop}
+
+						await eneact.upload(user, recording, stopActivity, (error)=> {			
+							if(!error){
+								conv.user.storage.activities = _.pullAllWith(conv.user.storage.activities, [recording], _.isEqual);
+								conv.ask(`${activity.name} is stopped  \n`);
+							}else{
+								conv.ask(`Cannot upload ${activity.name} \n`);
+							}
+						});
+
+					}else{
+						conv.ask(`${activity.name} is recording`);
+					}
+
+					
 				}
 				
 			
@@ -106,8 +118,7 @@ app.intent('list', async (conv, params) => {
 
 app.intent('clear', async (conv, params) => {
 	conv.user.storage.activities = {};
-	conv.user.storage.walk = {}
-	conv.ask(`conv.user.storage.activities ${conv.user.storage.activities}`)
+	conv.ask(`Clear storage`)
 });
 
   
@@ -131,6 +142,12 @@ app.intent('login', async (conv, params) => {
 	});
 
 });
+
+app.intent('logout', async (conv, params) => {
+	conv.user.storage = {};
+	conv.ask(`You have successfully signed out of your ${API} account.`)
+});
+
 
 expressApp.use(bodyParser.urlencoded({ extended: true }))
 expressApp.use(bodyParser.json());

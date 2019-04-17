@@ -1,0 +1,24 @@
+{
+  "name": "dialog-labels",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google-cloud/bigquery": "^3.0.0",
+    "@google-cloud/storage": "^2.5.0",
+    "actions-on-google": "^2.6.0",
+    "body-parser": "^1.18.3",
+    "dialogflow": "^0.8.2",
+    "express": "^4.16.4",
+    "moment": "^2.24.0",
+    "nodemon": "^1.18.11",
+    "request": "^2.88.0",
+    "request-promise-native": "^1.0.7",
+    "storage": "^0.2.0"
+  }
+}

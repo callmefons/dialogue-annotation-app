@@ -5,14 +5,19 @@ const https = require('https');
 const express = require('express');
 const bodyParser = require('body-parser');
 var _ = require('lodash');
-const moment = require('moment');
+const moment = require('moment-timezone');
 const uuidv4 = require('uuid/v4');
 
 const expressApp = express();
 
 // Import the service function and various response classes
 const {
-    dialogflow
+	dialogflow,
+	List,
+	Image,
+	SimpleResponse,
+	BrowseCarousel,
+	BrowseCarouselItem
 } = require('actions-on-google');
 
 const app = dialogflow({ debug: false});
@@ -58,7 +63,7 @@ app.intent('talk', async (conv, params) => {
 
 
 				if (!Array.isArray(conv.user.storage.activities)){
-					conv.user.storage.activities = [{name: "", uuid: ""}];
+					conv.user.storage.activities = [];
 				}
 
 				let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
@@ -68,7 +73,7 @@ app.intent('talk', async (conv, params) => {
 						conv.ask(`You have not stated ${activity.name} yet`)
 					}else{
 						const uuid = uuidv4();
-						const timeStart =  moment().format();
+						const timeStart =  moment().tz('Asia/Tokyo').format();
 						let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
 						conv.user.storage.activities.push(startActivity);
 						conv.ask(`${activity.name} is started`);
@@ -79,7 +84,7 @@ app.intent('talk', async (conv, params) => {
 
 					if(action === 'stop'){
 
-						const timeStop =  moment().format()
+						const timeStop =  moment().tz('Asia/Tokyo').format()
 						let stopActivity = {id: activity.id, name: activity.name, uuid: recording.uuid, timestamp: timeStop}
 
 						await eneact.upload(user, recording, stopActivity, (error)=> {			
@@ -94,11 +99,9 @@ app.intent('talk', async (conv, params) => {
 					}else{
 						conv.ask(`${activity.name} is recording`);
 					}
-
 					
 				}
 				
-			
 
 			}else{
 					conv.ask(`No acivity ${acivityParam} in DB`);
@@ -113,6 +116,15 @@ app.intent('talk', async (conv, params) => {
 })
 
 app.intent('list', async (conv, params) => {
+
+	let response = "";
+	if (Array.isArray(conv.user.storage.activities)){
+		conv.user.storage.activities.forEach(activity => {
+			response += "activity: " + activity.name + " \n\n" + "time: " + activity.timestamp + " \n\n"
+		});;
+	}
+
+	conv.ask(`response ${response}`);
 
 });
 

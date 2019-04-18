@@ -60,31 +60,6 @@ async function getActivity(activity) {
 	return rows;
 }
 
-async function insertActivity(activity) {
-  
-  const datasetId = "activity_dataset";
-  const tableId = "temp_activity_table";
-  
-  const rows = [activity]
-
-  // Insert data into a table
-  const [job] = await bigqueryClient
-    .dataset(datasetId)
-    .table(tableId)
-    .insert(rows, {'ignoreUnknownValues':true, 'raw':true});
-
-  // load() waits for the job to finish
-  console.log(`Insert ${job.id} completed.`);
-
-  // Check the job's status for errors
-  const errors = job.status.errors;
-  if (errors && errors.length > 0) {
-    throw errors;
-  }
-}
-
-
-
 async function insertRowsAsStream(conv, responseText) {
 
   const datasetId = `reports`;
@@ -115,6 +90,5 @@ async function insertRowsAsStream(conv, responseText) {
 module.exports = {
     insertRowsAsStream: insertRowsAsStream,
     loadJSONFromGCSAutodetect: loadJSONFromGCSAutodetect,
-    getActivity: getActivity,
-    insertActivity :insertActivity,
-};
+    getActivity: getActivity
+  };

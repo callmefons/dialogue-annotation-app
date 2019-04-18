@@ -79,7 +79,6 @@ app.intent('talk', async (conv, params) => {
 				
 				}else{
 
-
 					if(action === 'stop'){
 
 						const timeStop =  moment().tz('Asia/Tokyo').format()
@@ -149,7 +148,7 @@ app.intent('Default Fallback Intent', async (conv, params) => {
 
 app.intent('list', async (conv, params) => {
 
-	let response = "";
+	let response = "No actvity recording";
 	if (Array.isArray(conv.user.storage.activities)){
 		conv.user.storage.activities.forEach(activity => {
 			response += "activity: " + activity.name + " \n\n" + "time: " + activity.timestamp + " \n\n"
@@ -207,15 +206,15 @@ expressApp.use(bodyParser.urlencoded({ extended: true }))
 expressApp.use(bodyParser.json());
 expressApp.post('/fulfillment', app);
 
-
 expressApp.get('/', async (req, res) => {
 	const result = await db.getActivity();
 	res.send(result)
 });
 
-// expressApp.get('/test', (req, res) => {
-// 	db.insertRowsAsStream();
-// })
+expressApp.get('/load_json', (req, res) => {
+	db.loadJSONFromGCSAutodetect();
+	res.send(`loadJSONFromGCSAutodetect`);
+})
 	
 // Starting both http & https servers
 const httpServer = http.createServer(expressApp);

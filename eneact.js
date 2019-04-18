@@ -8,6 +8,8 @@ const API = 'https://bigact.sozolab.jp/';
 const loginAPI = `${API}login`;
 const logoutAPI = `${API}logout`;
 const uploadAPI = `${API}sensors/0/upload`
+const getSelfAPI = `${API}users/self.json`;
+const getActivityAPI = `${API}activity_types.json`
 
 const db = require('./db');
 
@@ -28,10 +30,9 @@ function login(user, callback){
                 if(loginRes.statusCode == 302 || loginRes.statusCode == 200){
         
                     const cookie = j.getCookieString(loginAPI);
-                    const activitiesAPI = `${API}users/self.json`
-                    const activityOptions = {uri: activitiesAPI, headers: {'cookie': cookie},method: "GET",json: true};
+                    const selfOptions = {uri: getSelfAPI, headers: {'cookie': cookie},method: "GET",json: true};
             
-                    return requestPromise( activityOptions )
+                    return requestPromise( selfOptions )
                     .then( selfRes => {
                         
                         let userSelf = {

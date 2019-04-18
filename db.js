@@ -1,6 +1,7 @@
 // Imports the Google Cloud client library
 const {BigQuery} = require('@google-cloud/bigquery');
 const {Storage} = require('@google-cloud/storage');
+const moment = require('moment-timezone');
 
 const bigqueryClient = new BigQuery({
 	projectId: 'fon-dialog-label',
@@ -82,7 +83,37 @@ async function insertActivity(activity) {
   }
 }
 
+
+
+async function insertRowsAsStream(conv, responseText) {
+
+  const datasetId = `reports`;
+  const tableId = `action_log`;
+ 
+  const logInput = {
+    time: moment().tz('Asia/Tokyo').format(),
+    userId: conv.user.storage.id,
+    userEmail: conv.user.storage.email,
+    text: conv.input.raw,
+    intent: conv.intent,
+    locale: conv.user.locale,
+    responseText: responseText,
+    conversationId: conv.id,
+  };
+
+  let errors = await bigqueryClient.dataset(datasetId).table(tableId).insert([logInput]);
+ 
+  if (errors && errors.length && errors[0].insertErrors) {
+    console.error(`Bigquery Insert failed ${errors[0].insertErrors}`);
+  }else{
+    console.log(`Insert ${logInput.conversationId} completed.`);
+  }
+
+}
+
+
 module.exports = {
+    insertRowsAsStream: insertRowsAsStream,
     loadJSONFromGCSAutodetect: loadJSONFromGCSAutodetect,
     getActivity: getActivity,
     insertActivity :insertActivity,

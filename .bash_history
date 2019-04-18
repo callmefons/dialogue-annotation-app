@@ -38,3 +38,4 @@ rm -rf index.js
 killall -9 node 
 node index.js 
 sudo su
+sudo su

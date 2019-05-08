@@ -44,9 +44,9 @@ async function loadJSONFromGCSAutodetect() {
 
 async function getActivity(activity) {
 
-	const query = `SELECT id, name
-	FROM \`activity_dataset.activity_table\`
-	WHERE name = \'${activity}\'`;
+	const query = `SELECT a.id, a.name AS activity, r.name AS questions
+	FROM \`activity_dataset.activity_table\` AS a, UNNEST(record_types) AS r
+	WHERE a.name = \'${activity}\'`;
 
 	const options = {query: query};
 
@@ -64,9 +64,11 @@ async function insertRowsAsStream(conv, responseText) {
 
   const datasetId = `reports`;
   const tableId = `action_log`;
+
+  
  
   const logInput = {
-    time: moment().tz('Asia/Tokyo').format(),
+    time: moment().tz('Asia/Tokyo').format().toString(),
     userId: conv.user.storage.id,
     userEmail: conv.user.storage.email,
     text: conv.input.raw,
@@ -75,6 +77,9 @@ async function insertRowsAsStream(conv, responseText) {
     responseText: responseText,
     conversationId: conv.id,
   };
+
+  console.log(logInput)
+
 
   let errors = await bigqueryClient.dataset(datasetId).table(tableId).insert([logInput]);
  

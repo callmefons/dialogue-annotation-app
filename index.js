@@ -12,7 +12,8 @@ const expressApp = express();
 
 // Import the service function and various response classes
 const {
-	dialogflow
+	dialogflow,
+	Confirmation
 } = require('actions-on-google');
 
 const app = dialogflow({ debug: false});
@@ -29,6 +30,13 @@ const credentials = {
 
 const db = require('./db');
 const eneact = require('./eneact');
+
+const methods = {
+    BASELINE: 'baseline',
+    PROPOSED: 'proposed'
+}
+
+let method = methods.BASELINE; 
 
 app.intent('talk', async (conv, params) => {
 	
@@ -52,7 +60,8 @@ app.intent('talk', async (conv, params) => {
 
 				const activity = {
 					id: activityResult[0].id,
-					name: activityResult[0].name
+					name: activityResult[0].activity,
+					questions: activityResult[0].questions
 				};
 
 
@@ -66,15 +75,17 @@ app.intent('talk', async (conv, params) => {
 					if(action === 'stop'){
 						conv.ask(`You have not stated ${activity.name} yet`)
 					}else{
+						
 						const uuid = uuidv4();
 						const timeStart =  moment().tz('Asia/Tokyo').format();
 						let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
 						conv.user.storage.activities.push(startActivity);
-						
-						const responseText = `${activity.name} is started`;
+						conv.user.storage.currentActivity = activity.name;
+						conv.user.storage.count = activityResult.length;
+
+						const responseText = `${activity.questions}`;
 						db.insertRowsAsStream(conv, responseText);
 						conv.ask(responseText);
-						
 					}
 				
 				}else{
@@ -91,7 +102,7 @@ app.intent('talk', async (conv, params) => {
 								db.insertRowsAsStream(conv, responseText);
 								conv.ask(responseText);
 							}else{
-								const responseText = `Cannot uploap ${activity.name}`;
+								const responseText = `Cannot upload ${activity.name}`;
 								db.insertRowsAsStream(conv, responseText);
 								conv.ask(responseText);
 							}
@@ -123,43 +134,58 @@ app.intent('talk', async (conv, params) => {
 })
 
 
+
 app.intent('Default Fallback Intent', async (conv, params) => {
 
-	const responses = [
-		"I didn't get that. Can you say it again?",
-		"I missed what you said. What was that?",
-		"Sorry, could you say that again?",
-		"Sorry, can you say that again?",
-		"Can you say that again?",
-		"Sorry, I didn't get that. Can you rephrase?",
-		"Sorry, what was that?",
-		"One more time?",
-		"What was that?",
-		"Say that one more time?",
-		"I didn't get that. Can you repeat?",
-		"I missed that, say that again?"
-	]
+	if(conv.user.storage.currentActivity != null){
+		const responseText = `${conv.user.storage.currentActivity} is started`;
+		db.insertRowsAsStream(conv, responseText);
+		conv.ask(responseText);
+		conv.user.storage.currentActivity = null;
+	}else {
 
-	const responseText = _.sample(responses);
-	db.insertRowsAsStream(conv, responseText);
-	conv.ask(responseText);
-	
+		const responses = [
+			"I didn't get that. Can you say it again?",
+			"I missed what you said. What was that?",
+			"Sorry, could you say that again?",
+			"Sorry, can you say that again?",
+			"Can you say that again?",
+			"Sorry, I didn't get that. Can you rephrase?",
+			"Sorry, what was that?",
+			"One more time?",
+			"What was that?",
+			"Say that one more time?",
+			"I didn't get that. Can you repeat?",
+			"I missed that, say that again?"
+		]
+
+		const responseText = _.sample(responses);
+		db.insertRowsAsStream(conv, responseText);
+		conv.ask(responseText);
+
+	}
+
 });
 
 app.intent('list', async (conv, params) => {
-
-	let response = "No actvity recording";
+	
+	let response = "";
 	if (Array.isArray(conv.user.storage.activities)){
 		conv.user.storage.activities.forEach(activity => {
 			response += "activity: " + activity.name + " \n\n" + "time: " + activity.timestamp + " \n\n"
 		});;
+	}else{
+		response = "No actvity recording"
 	}
 
 	const responseText = response;
-	db.insertRowsAsStream(conv, responseText);
+	db.insertRowsAsStream(convActivity, responseText);
 	conv.ask(responseText);
-
 });
+
+app.intent('talk - yes', (conv, params) => {
+	//console.log(conv.body.queryResult.outputContexts[0].parameters.activity);
+})
 
 app.intent('login', async (conv, params) => {
 	
@@ -216,10 +242,10 @@ expressApp.get('/load_json', (req, res) => {
 	res.send(`loadJSONFromGCSAutodetect`);
 })
 	
-// Starting both http & https servers
 const httpServer = http.createServer(expressApp);
 const httpsServer = https.createServer(credentials, expressApp);
 const httpPort = 80;
+// const httpPort = 3000;
 const httpsPort = 443;
 
 httpServer.listen(httpPort, () => {

@@ -39,3 +39,11 @@ killall -9 node
 node index.js 
 sudo su
 sudo su
+sudo su
+sudo su
+ls
+sudo su
+sudo su
+ls
+node index.js 
+sudo su

@@ -60,12 +60,10 @@ async function getActivity(activity) {
 	return rows;
 }
 
-async function insertRowsAsStream(conv, responseText) {
+async function insertRowsAsStream(conv, responseText, recordType) {
 
   const datasetId = `reports`;
   const tableId = `action_log`;
-
-  
  
   const logInput = {
     time: moment().tz('Asia/Tokyo').format().toString(),
@@ -73,6 +71,7 @@ async function insertRowsAsStream(conv, responseText) {
     userEmail: conv.user.storage.email,
     text: conv.input.raw,
     intent: conv.intent,
+    recordType: recordType,
     locale: conv.user.locale,
     responseText: responseText,
     conversationId: conv.id,

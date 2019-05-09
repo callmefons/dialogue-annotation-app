@@ -47,3 +47,4 @@ sudo su
 ls
 node index.js 
 sudo su
+sudo su

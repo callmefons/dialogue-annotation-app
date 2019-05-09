@@ -31,12 +31,20 @@ const credentials = {
 const db = require('./db');
 const eneact = require('./eneact');
 
-const methods = {
-    BASELINE: 'baseline',
-    PROPOSED: 'proposed'
+const RECORD_TYPES = {
+	START_RECORD: 'start',
+	RECORDING: 'recording',
+	STOP_RECORD: 'stop',
+	RECORD: 'record',
+	SHOW: 'show',
+	LOGIN: 'login',
+	LOGOUT: 'logout',
+	CLEAR: 'clear',
+    QUESTION: 'question',
+	FALLBACK: 'fallback',
+	ERROR: 'error',
+	OTHER: 'other'
 }
-
-let method = methods.BASELINE; 
 
 app.intent('talk', async (conv, params) => {
 	
@@ -67,24 +75,28 @@ app.intent('talk', async (conv, params) => {
 
 				if (!Array.isArray(conv.user.storage.activities)){
 					conv.user.storage.activities = [];
+					conv.user.storage.activityResult = [];
 				}
 
 				let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
 				if(recording === undefined) {
 
 					if(action === 'stop'){
-						conv.ask(`You have not stated ${activity.name} yet`)
+						const responseText = `You have not stated ${activity.name} yet`;
+						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
+						conv.ask(responseText);
 					}else{
 						
 						const uuid = uuidv4();
 						const timeStart =  moment().tz('Asia/Tokyo').format();
 						let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
+						
 						conv.user.storage.activities.push(startActivity);
-						conv.user.storage.currentActivity = activity.name;
-						conv.user.storage.count = activityResult.length;
+						conv.user.storage.activityResult = activityResult;
+						conv.user.storage.count = activityResult.length - 1;
 
 						const responseText = `${activity.questions}`;
-						db.insertRowsAsStream(conv, responseText);
+						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
 						conv.ask(responseText);
 					}
 				
@@ -99,18 +111,18 @@ app.intent('talk', async (conv, params) => {
 							if(!error){
 								conv.user.storage.activities = _.pullAllWith(conv.user.storage.activities, [recording], _.isEqual);
 								const responseText = `${activity.name} is stopped`;
-								db.insertRowsAsStream(conv, responseText);
+								db.insertRowsAsStream(conv, responseText, RECORD_TYPES.STOP_RECORD);
 								conv.ask(responseText);
 							}else{
 								const responseText = `Cannot upload ${activity.name}`;
-								db.insertRowsAsStream(conv, responseText);
+								db.insertRowsAsStream(conv, responseText, RECORD_TYPES.ERROR);
 								conv.ask(responseText);
 							}
 						});
 
 					}else{
 						const responseText = `${activity.name} is recording`;
-						db.insertRowsAsStream(conv, responseText);
+						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORDING);
 						conv.ask(responseText);
 					}	
 				}
@@ -119,7 +131,7 @@ app.intent('talk', async (conv, params) => {
 			}else{
 
 				const responseText = `No acivity ${acivityParam} in DB`;
-				db.insertRowsAsStream(conv, responseText);
+				db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
 				conv.ask(responseText);
 			}
 
@@ -127,7 +139,7 @@ app.intent('talk', async (conv, params) => {
 	
 	}else{
 		const responseText = `Please login with ${eneact.API} account, by saying \'login\'`;
-		db.insertRowsAsStream(conv, responseText);
+		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.ERROR);
 		conv.ask(responseText);
 	}	
 
@@ -135,13 +147,20 @@ app.intent('talk', async (conv, params) => {
 
 
 
-app.intent('Default Fallback Intent', async (conv, params) => {
+app.intent('Any', async (conv, params) => {
 
-	if(conv.user.storage.currentActivity != null){
-		const responseText = `${conv.user.storage.currentActivity} is started`;
-		db.insertRowsAsStream(conv, responseText);
+	if(conv.user.storage.count == 0){
+		const responseText = `${conv.user.storage.activityResult[0].activity} is started`;
+		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
 		conv.ask(responseText);
-		conv.user.storage.currentActivity = null;
+		
+	}else if(conv.user.storage.count > 0){
+
+		const responseText = `${conv.user.storage.activityResult[conv.user.storage.count].questions}`;
+		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.START_RECORD);
+		conv.ask(responseText);
+		conv.user.storage.count = conv.user.storage.count - 1;
+
 	}else {
 
 		const responses = [
@@ -160,7 +179,7 @@ app.intent('Default Fallback Intent', async (conv, params) => {
 		]
 
 		const responseText = _.sample(responses);
-		db.insertRowsAsStream(conv, responseText);
+		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
 		conv.ask(responseText);
 
 	}
@@ -179,13 +198,10 @@ app.intent('list', async (conv, params) => {
 	}
 
 	const responseText = response;
-	db.insertRowsAsStream(convActivity, responseText);
+	db.insertRowsAsStream(convActivity, responseText, RECORD_TYPES.SHOW);
 	conv.ask(responseText);
 });
 
-app.intent('talk - yes', (conv, params) => {
-	//console.log(conv.body.queryResult.outputContexts[0].parameters.activity);
-})
 
 app.intent('login', async (conv, params) => {
 	
@@ -200,12 +216,12 @@ app.intent('login', async (conv, params) => {
 			conv.user.storage.password = userSelf.password;
 
 			const responseText = `Hi! ${conv.user.storage.name}`;
-			db.insertRowsAsStream(conv, responseText);
+			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.LOGIN);
 			conv.ask(responseText);
 
 		}else{
 			const responseText = `${error}`;
-			db.insertRowsAsStream(conv, responseText);
+			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.ERROR);
 			conv.ask(responseText);
 		}
 
@@ -216,14 +232,14 @@ app.intent('login', async (conv, params) => {
 app.intent('logout', async (conv, params) => {
 	conv.user.storage = {};
 	const responseText = `You have successfully signed out of your ${API} account.`;
-	db.insertRowsAsStream(conv, responseText);
+	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.LOGOUT);
 	conv.ask(responseText);
 });
 
 app.intent('clear', async (conv, params) => {
 	conv.user.storage.activities = {};
 	const responseText = `Clear local storage`;
-	db.insertRowsAsStream(conv, responseText);
+	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.CLEAR);
 	conv.ask(responseText);
 });
 

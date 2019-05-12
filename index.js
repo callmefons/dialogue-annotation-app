@@ -49,15 +49,16 @@ const RECORD_TYPES = {
 
 app.intent('walk', async (conv, params) => {
 
-	conv.user.storage.questions = [];
-
 	if(!params['location']){
-		conv.user.storage.questions.push("Where are you going?")
+		let responseText = "Where are you going?";
+		conv.ask(responseText);
+		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
+	}else{
+		let responseText = await talk(conv, params);
+		conv.ask(responseText);
+		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
 	}
-
-	let response = await talk(conv, params);
-	conv.ask(response);
-
+	
 })
 
 async function talk(conv, params){
@@ -66,7 +67,6 @@ async function talk(conv, params){
 
 	conv.user.storage.start = null;
 	conv.user.storage.stop = null;
-	conv.user.storage.location = null;
  
 	if(!Array.isArray(conv.user.storage.activities)){
 		conv.user.storage.dialogue = [];
@@ -89,100 +89,88 @@ async function talk(conv, params){
 				const activity = {
 					id: activityResult[0].id,
 					name: activityResult[0].activity,
-					questions:  conv.user.storage.questions
 				};
 
 				conv.user.storage.user = user;
 				conv.user.storage.activity = activity;
 
-				if(params['time-start'] || params['time-period']){
-
-					/* -------------------- past activity -------------------- */
-
-					if(params['time-start']){
-				
-						let responseText  = `What time you have finised work?`;
-						conv.user.storage.start = params['time-start'];
-						conv.user.storage.count = activityResult.length - 1;
-
-						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
-						response = responseText;
+				if(params['time-start']){
+						
+					const uuid = uuidv4();
+					const timeStart = params['time-start'];
 					
-			
-					}else{
+					let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
+					conv.user.storage.startActivity = startActivity;
 
-						conv.user.storage.start =   params['time-period'].startTime;
-						conv.user.storage.stop =  params['time-period'].endTime;
-							
-						if(conv.user.storage.questions.length > 0){
+					const responseText = `When you have finished work?`;
+					response = responseText;
+					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
 
-							conv.user.storage.count = activityResult.length - 1;
-							const responseText = `${activity.questions[0]}`;
-							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
-							response = responseText;
-
-						}else{
-							
-							const responseText = `${activity.name} is started`;
-							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
-							response = responseText;
-						}
+				}else if (params['time-period']){
 
 						
+					const uuid = uuidv4();
+					const timeStart = params['time-period'].startTime;
+					const timeStop =  params['time-period'].endTime;
+
+					let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
+					let stopActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStop}
+
+					await eneact.upload(user, startActivity, stopActivity, (error)=> {			
+						if(!error){
+							const responseText = `${activity.name} is record from ${timeStart} to ${timeStop}`;
+							response = responseText;
+							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
+
+						}else{
+							const responseText = `Cannot upload ${activity.name}`;
+							response = responseText;
+							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
+
+						}
+					});
 					
-					}
-
+				
 				}else{
-
-					/* -------------------- current activity -------------------- */
 
 					let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
 					if(recording === undefined) {
-
 
 						const uuid = uuidv4();
 						const timeStart =  moment().tz('Asia/Tokyo').format();
 						let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
 						conv.user.storage.activities.push(startActivity);
-					
-						if(conv.user.storage.questions.length > 0){
-
-							conv.user.storage.count = activity.questions.length - 1;
-							
-							const responseText = `${activity.questions[0]}`;
-							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
-							response = responseText;
-
-						}else{
-							
-							const responseText = `${activity.name} is started`;
-							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
-							response = responseText;
-						}
-						
-
-					}else{	
-
-						const responseText = `${activity.name} is recording`;
-						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORDING);
+		
+						const responseText = `${activity.name} is started`;
 						response = responseText;
+						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.START_RECORD);
+
+					}else{
+						const responseText = `Sorry! ${activity.name} is recording`;
+						response = responseText;
+						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORDING);
+
 					}
+
 				}
 				
 
 			}else{
 
 				const responseText = `No acivity ${params['activity']} in DB`;
-				db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
 				response = responseText;
+				db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
+
+
 			}
 
 		
 	
 	}else{
 		const responseText = `Please login with ${eneact.API} account, by saying \'login\'`;
-		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.ERROR);
 		response = responseText;
+		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
+
 	}	
 
 	return response;
@@ -202,22 +190,19 @@ app.intent('stop', async (conv, params) => {
 		let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
 		if(recording === undefined) {
 			const responseText = `You have not stated ${activity.name} yet`;
-			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
 			conv.ask(responseText);
 		}else{
 
 			const timeStop =  moment().tz('Asia/Tokyo').format()
 			let stopActivity = {id: activity.id, name: activity.name, uuid: recording.uuid, timestamp: timeStop}
 
-			await eneact.upload(user, recording, stopActivity, (error)=> {			
+			await eneact.upload(user, recording, stopActivity, (error) => {			
 				if(!error){
 					conv.user.storage.activities = _.pullAllWith(conv.user.storage.activities, [recording], _.isEqual);
 					const responseText = `${activity.name} is stopped`;
-					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.STOP_RECORD);
 					conv.ask(responseText);
 				}else{
 					const responseText = `Cannot upload ${activity.name}`;
-					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.ERROR);
 					conv.ask(responseText);
 				}
 			});
@@ -226,7 +211,6 @@ app.intent('stop', async (conv, params) => {
 	}else{
 
 		const responseText = `No acivity ${params['activity']} in DB`;
-		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
 		conv.ask(responseText);
 	}
 
@@ -234,90 +218,43 @@ app.intent('stop', async (conv, params) => {
 
 app.intent('time-stop', async (conv, params) => {
 		
+	const timeStop =  params['time-stop'];
 	const user = conv.user.storage.user;
-	const activity = conv.user.storage.activity;	
-	conv.user.storage.stop = params['time-stop'];
+	const activity = conv.user.storage.startActivity;
+	let stopActivity = {id: activity.id, name: activity.name, uuid: activity.uuid, timestamp: timeStop}
 
-	if(conv.user.storage.questions.length > 0){
-
-		const responseText = `${conv.user.storage.questions[0]}`;
-		conv.user.storage.count = conv.user.storage.count - 1;
-		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
-		conv.ask(responseText);
-
-	}else{
-		
-		const responseText = `${activity.name} is started`;
-		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
-		conv.ask(responseText);
-	}
+	await eneact.upload(user, activity, stopActivity, (error) => {			
+		if(!error){
+			const responseText = `${activity.name} is record from ${activity.timestamp} to ${activity.timestamp}`;
+			conv.ask(responseText);
+		}else{
+			const responseText = `Cannot upload ${activity.name}`;
+			conv.ask(responseText);
+		}
+	});
 
 })
 
-app.intent('Any', async (conv, params) => {
+app.intent('Fallback', async (conv, params) => {
 
-	console.log(`conv.user.storage.count ${conv.user.storage.count}`);
+	const responses = [
+		"I didn't get that. Can you say it again?",
+		"I missed what you said. What was that?",
+		"Sorry, could you say that again?",
+		"Sorry, can you say that again?",
+		"Can you say that again?",
+		"Sorry, I didn't get that. Can you rephrase?",
+		"Sorry, what was that?",
+		"One more time?",
+		"What was that?",
+		"Say that one more time?",
+		"I didn't get that. Can you repeat?",
+		"I missed that, say that again?"
+	]
 
-	const user = conv.user.storage.user;
-	const activity = conv.user.storage.activity;	
-
-	if(conv.user.storage.count == 0){
-
-		if(conv.user.storage.start == null && conv.user.storage.stop == null){
-			const responseText = `${activity.name} is started`;
-			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
-			conv.ask(responseText);
-		}else{
-			
-			const uuid = uuidv4();
-			const timeStart =  conv.user.storage.start;
-			const timeStop =  conv.user.storage.stop;
-
-			let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
-			let stopActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStop}
-
-			await eneact.upload(user, startActivity, stopActivity, (error)=> {			
-				if(!error){
-					const responseText = `${activity.name} is record from ${timeStart} to ${timeStop}`;
-					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.STOP_RECORD);
-					conv.ask(responseText);
-				}else{
-					const responseText = `Cannot upload ${activity.name}`;
-					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.ERROR);
-					conv.ask(responseText);
-				}
-			});
-					
-		}
-		
-	}else if(conv.user.storage.count > 0){
-
-		const responseText = `${activity.questions[conv.user.storage.count]}`;
-		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.START_RECORD);
-		conv.ask(responseText);
-		conv.user.storage.count = conv.user.storage.count - 1;
-
-	}else {
-		const responses = [
-			"I didn't get that. Can you say it again?",
-			"I missed what you said. What was that?",
-			"Sorry, could you say that again?",
-			"Sorry, can you say that again?",
-			"Can you say that again?",
-			"Sorry, I didn't get that. Can you rephrase?",
-			"Sorry, what was that?",
-			"One more time?",
-			"What was that?",
-			"Say that one more time?",
-			"I didn't get that. Can you repeat?",
-			"I missed that, say that again?"
-		]
-	
-		const responseText = _.sample(responses);
-		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
-		conv.ask(responseText);
-	}
-	
+	const responseText = _.sample(responses);
+	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
+	conv.ask(responseText);
 
 });
 

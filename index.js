@@ -275,7 +275,6 @@ app.intent('show', async (conv, params) => {
 	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.SHOW);
 });
 
-s
 
 
 app.intent('login', async (conv, params) => {

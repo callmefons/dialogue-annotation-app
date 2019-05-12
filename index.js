@@ -46,16 +46,36 @@ const RECORD_TYPES = {
 	OTHER: 'other'
 }
 
-app.intent('talk', async (conv, params) => {
-	
-	let action = params['action'];
+
+app.intent('walk', async (conv, params) => {
+
+	conv.user.storage.questions = [];
+
+	if(!params['location']){
+		conv.user.storage.questions.push("Where are you going?")
+	}
+
+	let response = await talk(conv, params);
+	conv.ask(response);
+
+})
+
+async function talk(conv, params){
+
+	let response = "";
+
+	conv.user.storage.start = null;
+	conv.user.storage.stop = null;
+	conv.user.storage.location = null;
+ 
+	if(!Array.isArray(conv.user.storage.activities)){
+		conv.user.storage.dialogue = [];
+		conv.user.storage.activities = [];
+	}
 	
 	if(conv.user.storage.email && conv.user.storage.password){
 
-		for (let index in params['activity']) {
-	
-			const acivityParam = params['activity'][index];
-			const activityResult = await db.getActivity(acivityParam);
+			const activityResult = await db.getActivity(params['activity']);
 				
 			if(activityResult.length > 0){
 
@@ -69,100 +89,215 @@ app.intent('talk', async (conv, params) => {
 				const activity = {
 					id: activityResult[0].id,
 					name: activityResult[0].activity,
-					questions: activityResult[0].questions
+					questions:  conv.user.storage.questions
 				};
 
+				conv.user.storage.user = user;
+				conv.user.storage.activity = activity;
 
-				if (!Array.isArray(conv.user.storage.activities)){
-					conv.user.storage.activities = [];
-					conv.user.storage.activityResult = [];
-				}
+				if(params['time-start'] || params['time-period']){
 
-				let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
-				if(recording === undefined) {
+					/* -------------------- past activity -------------------- */
 
-					if(action === 'stop'){
-						const responseText = `You have not stated ${activity.name} yet`;
-						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
-						conv.ask(responseText);
+					if(params['time-start']){
+				
+						let responseText  = `What time you have finised work?`;
+						conv.user.storage.start = params['time-start'];
+						conv.user.storage.count = activityResult.length - 1;
+
+						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
+						response = responseText;
+					
+			
 					}else{
+
+						conv.user.storage.start =   params['time-period'].startTime;
+						conv.user.storage.stop =  params['time-period'].endTime;
+							
+						if(conv.user.storage.questions.length > 0){
+
+							conv.user.storage.count = activityResult.length - 1;
+							const responseText = `${activity.questions[0]}`;
+							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
+							response = responseText;
+
+						}else{
+							
+							const responseText = `${activity.name} is started`;
+							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
+							response = responseText;
+						}
+
 						
+					
+					}
+
+				}else{
+
+					/* -------------------- current activity -------------------- */
+
+					let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
+					if(recording === undefined) {
+
+
 						const uuid = uuidv4();
 						const timeStart =  moment().tz('Asia/Tokyo').format();
 						let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
-						
 						conv.user.storage.activities.push(startActivity);
-						conv.user.storage.activityResult = activityResult;
-						conv.user.storage.count = activityResult.length - 1;
+					
+						if(conv.user.storage.questions.length > 0){
 
-						const responseText = `${activity.questions}`;
-						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
-						conv.ask(responseText);
-					}
-				
-				}else{
+							conv.user.storage.count = activity.questions.length - 1;
+							
+							const responseText = `${activity.questions[0]}`;
+							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
+							response = responseText;
 
-					if(action === 'stop'){
+						}else{
+							
+							const responseText = `${activity.name} is started`;
+							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
+							response = responseText;
+						}
+						
 
-						const timeStop =  moment().tz('Asia/Tokyo').format()
-						let stopActivity = {id: activity.id, name: activity.name, uuid: recording.uuid, timestamp: timeStop}
+					}else{	
 
-						await eneact.upload(user, recording, stopActivity, (error)=> {			
-							if(!error){
-								conv.user.storage.activities = _.pullAllWith(conv.user.storage.activities, [recording], _.isEqual);
-								const responseText = `${activity.name} is stopped`;
-								db.insertRowsAsStream(conv, responseText, RECORD_TYPES.STOP_RECORD);
-								conv.ask(responseText);
-							}else{
-								const responseText = `Cannot upload ${activity.name}`;
-								db.insertRowsAsStream(conv, responseText, RECORD_TYPES.ERROR);
-								conv.ask(responseText);
-							}
-						});
-
-					}else{
 						const responseText = `${activity.name} is recording`;
 						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORDING);
-						conv.ask(responseText);
-					}	
+						response = responseText;
+					}
 				}
 				
 
 			}else{
 
-				const responseText = `No acivity ${acivityParam} in DB`;
+				const responseText = `No acivity ${params['activity']} in DB`;
 				db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
-				conv.ask(responseText);
+				response = responseText;
 			}
 
-		}
+		
 	
 	}else{
 		const responseText = `Please login with ${eneact.API} account, by saying \'login\'`;
 		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.ERROR);
-		conv.ask(responseText);
+		response = responseText;
 	}	
+
+	return response;
+
+}
+
+
+app.intent('stop', async (conv, params) => {
+
+	const activityResult = await db.getActivity(params['activity']);
+				
+	if(activityResult.length > 0){
+
+		const user = conv.user.storage.user;
+		const activity = conv.user.storage.activity;
+
+		let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
+		if(recording === undefined) {
+			const responseText = `You have not stated ${activity.name} yet`;
+			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
+			conv.ask(responseText);
+		}else{
+
+			const timeStop =  moment().tz('Asia/Tokyo').format()
+			let stopActivity = {id: activity.id, name: activity.name, uuid: recording.uuid, timestamp: timeStop}
+
+			await eneact.upload(user, recording, stopActivity, (error)=> {			
+				if(!error){
+					conv.user.storage.activities = _.pullAllWith(conv.user.storage.activities, [recording], _.isEqual);
+					const responseText = `${activity.name} is stopped`;
+					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.STOP_RECORD);
+					conv.ask(responseText);
+				}else{
+					const responseText = `Cannot upload ${activity.name}`;
+					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.ERROR);
+					conv.ask(responseText);
+				}
+			});
+			
+		}
+	}else{
+
+		const responseText = `No acivity ${params['activity']} in DB`;
+		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
+		conv.ask(responseText);
+	}
+
+});
+
+app.intent('time-stop', async (conv, params) => {
+		
+	const user = conv.user.storage.user;
+	const activity = conv.user.storage.activity;	
+	conv.user.storage.stop = params['time-stop'];
+
+	if(conv.user.storage.questions.length > 0){
+
+		const responseText = `${conv.user.storage.questions[0]}`;
+		conv.user.storage.count = conv.user.storage.count - 1;
+		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
+		conv.ask(responseText);
+
+	}else{
+		
+		const responseText = `${activity.name} is started`;
+		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
+		conv.ask(responseText);
+	}
 
 })
 
-
-
 app.intent('Any', async (conv, params) => {
 
+	console.log(`conv.user.storage.count ${conv.user.storage.count}`);
+
+	const user = conv.user.storage.user;
+	const activity = conv.user.storage.activity;	
+
 	if(conv.user.storage.count == 0){
-		const responseText = `${conv.user.storage.activityResult[0].activity} is started`;
-		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
-		conv.ask(responseText);
+
+		if(conv.user.storage.start == null && conv.user.storage.stop == null){
+			const responseText = `${activity.name} is started`;
+			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
+			conv.ask(responseText);
+		}else{
+			
+			const uuid = uuidv4();
+			const timeStart =  conv.user.storage.start;
+			const timeStop =  conv.user.storage.stop;
+
+			let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
+			let stopActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStop}
+
+			await eneact.upload(user, startActivity, stopActivity, (error)=> {			
+				if(!error){
+					const responseText = `${activity.name} is record from ${timeStart} to ${timeStop}`;
+					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.STOP_RECORD);
+					conv.ask(responseText);
+				}else{
+					const responseText = `Cannot upload ${activity.name}`;
+					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.ERROR);
+					conv.ask(responseText);
+				}
+			});
+					
+		}
 		
 	}else if(conv.user.storage.count > 0){
 
-		const responseText = `${conv.user.storage.activityResult[conv.user.storage.count].questions}`;
+		const responseText = `${activity.questions[conv.user.storage.count]}`;
 		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.START_RECORD);
 		conv.ask(responseText);
 		conv.user.storage.count = conv.user.storage.count - 1;
 
 	}else {
-
 		const responses = [
 			"I didn't get that. Can you say it again?",
 			"I missed what you said. What was that?",
@@ -177,12 +312,12 @@ app.intent('Any', async (conv, params) => {
 			"I didn't get that. Can you repeat?",
 			"I missed that, say that again?"
 		]
-
+	
 		const responseText = _.sample(responses);
 		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
 		conv.ask(responseText);
-
 	}
+	
 
 });
 
@@ -198,15 +333,17 @@ app.intent('list', async (conv, params) => {
 	}
 
 	const responseText = response;
-	db.insertRowsAsStream(convActivity, responseText, RECORD_TYPES.SHOW);
+	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.SHOW);
 	conv.ask(responseText);
 });
+
+
 
 
 app.intent('login', async (conv, params) => {
 	
 	const user = {login: params['email'], password: params['password']};
-			
+
 	await eneact.login(user, (error, userSelf)=> {
 		if(!error){
 

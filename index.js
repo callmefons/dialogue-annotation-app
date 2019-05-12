@@ -32,32 +32,24 @@ const db = require('./db');
 const eneact = require('./eneact');
 
 const RECORD_TYPES = {
+	TIME_START: 'time-start',
+	TIME_STOP: 'time-stop',
+	TIME_PERIOD: 'time-period',
 	START_RECORD: 'start',
 	RECORDING: 'recording',
 	STOP_RECORD: 'stop',
-	RECORD: 'record',
 	SHOW: 'show',
 	LOGIN: 'login',
-	LOGOUT: 'logout',
 	CLEAR: 'clear',
-    QUESTION: 'question',
 	FALLBACK: 'fallback',
-	ERROR: 'error',
 	OTHER: 'other'
 }
 
 
-app.intent('walk', async (conv, params) => {
+app.intent('talk', async (conv, params) => {
 
-	if(!params['location']){
-		let responseText = "Where are you going?";
-		conv.ask(responseText);
-		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
-	}else{
-		let responseText = await talk(conv, params);
-		conv.ask(responseText);
-		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
-	}
+	let responseText = await talk(conv, params);
+	conv.ask(responseText);
 	
 })
 
@@ -104,7 +96,7 @@ async function talk(conv, params){
 
 					const responseText = `When you have finished work?`;
 					response = responseText;
-					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.QUESTION);
+					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.TIME_START);
 
 				}else if (params['time-period']){
 
@@ -120,7 +112,7 @@ async function talk(conv, params){
 						if(!error){
 							const responseText = `${activity.name} is record from ${timeStart} to ${timeStop}`;
 							response = responseText;
-							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORD);
+							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.TIME_PERIOD);
 
 						}else{
 							const responseText = `Cannot upload ${activity.name}`;
@@ -201,9 +193,11 @@ app.intent('stop', async (conv, params) => {
 					conv.user.storage.activities = _.pullAllWith(conv.user.storage.activities, [recording], _.isEqual);
 					const responseText = `${activity.name} is stopped`;
 					conv.ask(responseText);
+					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.STOP_RECORD);
 				}else{
 					const responseText = `Cannot upload ${activity.name}`;
 					conv.ask(responseText);
+					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
 				}
 			});
 			
@@ -225,17 +219,19 @@ app.intent('time-stop', async (conv, params) => {
 
 	await eneact.upload(user, activity, stopActivity, (error) => {			
 		if(!error){
-			const responseText = `${activity.name} is record from ${activity.timestamp} to ${activity.timestamp}`;
+			const responseText = `${activity.name} is record from ${activity.timestamp} to ${timeStop}`;
 			conv.ask(responseText);
+			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.TIME_STOP);
 		}else{
 			const responseText = `Cannot upload ${activity.name}`;
 			conv.ask(responseText);
+			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
 		}
 	});
 
 })
 
-app.intent('Fallback', async (conv, params) => {
+app.intent('fallback', async (conv, params) => {
 
 	const responses = [
 		"I didn't get that. Can you say it again?",
@@ -253,28 +249,33 @@ app.intent('Fallback', async (conv, params) => {
 	]
 
 	const responseText = _.sample(responses);
-	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
 	conv.ask(responseText);
+	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
 
 });
 
-app.intent('list', async (conv, params) => {
+app.intent('show', async (conv, params) => {
 	
 	let response = "";
+	
 	if (Array.isArray(conv.user.storage.activities)){
-		conv.user.storage.activities.forEach(activity => {
-			response += "activity: " + activity.name + " \n\n" + "time: " + activity.timestamp + " \n\n"
-		});;
-	}else{
-		response = "No actvity recording"
+
+		if(conv.user.storage.activities.length > 0){
+			conv.user.storage.activities.forEach(activity => {
+				response += "activity: " + activity.name + " \n\n" + "time: " + activity.timestamp + " \n\n"
+			});;
+		}else{
+			response = "No activity is recording"
+		}
+		
 	}
 
 	const responseText = response;
-	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.SHOW);
 	conv.ask(responseText);
+	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.SHOW);
 });
 
-
+s
 
 
 app.intent('login', async (conv, params) => {
@@ -290,13 +291,13 @@ app.intent('login', async (conv, params) => {
 			conv.user.storage.password = userSelf.password;
 
 			const responseText = `Hi! ${conv.user.storage.name}`;
-			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.LOGIN);
 			conv.ask(responseText);
+			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.LOGIN);
 
 		}else{
 			const responseText = `${error}`;
-			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.ERROR);
 			conv.ask(responseText);
+			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
 		}
 
 	});
@@ -306,15 +307,17 @@ app.intent('login', async (conv, params) => {
 app.intent('logout', async (conv, params) => {
 	conv.user.storage = {};
 	const responseText = `You have successfully signed out of your ${API} account.`;
-	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.LOGOUT);
 	conv.ask(responseText);
+	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.LOGIN);
+
 });
 
 app.intent('clear', async (conv, params) => {
 	conv.user.storage.activities = {};
 	const responseText = `Clear local storage`;
-	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.CLEAR);
 	conv.ask(responseText);
+	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.CLEAR);
+
 });
 
 

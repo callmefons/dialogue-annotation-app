@@ -60,16 +60,19 @@ async function getActivity(activity) {
 	return rows;
 }
 
-async function insertRowsAsStream(conv, responseText, recordType) {
+async function insertRowsAsStream(conv, responseText, timeStart = null, timeStop = null, recordType) {
 
   const datasetId = `reports`;
   const tableId = `action_log`;
  
   const logInput = {
     time: moment().tz('Asia/Tokyo').format().toString(),
+    timeStart: timeStart,
+    timeStop: timeStop,
     userId: conv.user.storage.id,
     userEmail: conv.user.storage.email,
     text: conv.input.raw,
+    platform: conv.input.type,
     intent: conv.intent,
     recordType: recordType,
     locale: conv.user.locale,
@@ -77,7 +80,8 @@ async function insertRowsAsStream(conv, responseText, recordType) {
     conversationId: conv.id,
   };
 
-  console.log(logInput)
+  console.log(logInput);
+  console.log(conv.input)
 
 
   let errors = await bigqueryClient.dataset(datasetId).table(tableId).insert([logInput]);

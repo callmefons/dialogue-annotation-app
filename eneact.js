@@ -66,7 +66,7 @@ function login(user, callback){
 
 
 
-async function upload(user, startcAtivity, stopActivity, callback){
+async function upload(user, startActivity, stopActivity, callback){
 
     const loginOptions = {uri: loginAPI,jar: j,method: "POST",json: true,body: {login: user.email, password: user.password}, resolveWithFullResponse: true};
 
@@ -86,7 +86,7 @@ async function upload(user, startcAtivity, stopActivity, callback){
         
         let startBody = {
             filename: filename, type: type, version: version, 
-            data: `${startcAtivity.timestamp},${startcAtivity.id},${startcAtivity.name},true,${user.id};,${startcAtivity.uuid},`
+            data: `${startActivity.timestamp},${startActivity.id},${startActivity.name},true,${user.id};,${startActivity.uuid},`
         };
         const startOptions = {uri: uploadAPI, headers: {'cookie': cookie},method: "POST",json: true, body: startBody, resolveWithFullResponse: true};
 

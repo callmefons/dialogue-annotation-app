@@ -10,12 +10,7 @@ const uuidv4 = require('uuid/v4');
 
 const expressApp = express();
 
-// Import the service function and various response classes
-const {
-	dialogflow,
-	Confirmation
-} = require('actions-on-google');
-
+const {dialogflow} = require('actions-on-google');
 const app = dialogflow({ debug: false});
 
 const privateKey = fs.readFileSync('/etc/letsencrypt/live/dialog-labels.sozolab.jp/privkey.pem', 'utf8');
@@ -86,21 +81,8 @@ async function talk(conv, params){
 				conv.user.storage.user = user;
 				conv.user.storage.activity = activity;
 
-				if(params['time-start']){
-						
-					const uuid = uuidv4();
-					const timeStart = params['time-start'];
-					
-					let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
-					conv.user.storage.startActivity = startActivity;
+				if (params['time-period']){
 
-					const responseText = `When you have finished work?`;
-					response = responseText;
-					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.TIME_START);
-
-				}else if (params['time-period']){
-
-						
 					const uuid = uuidv4();
 					const timeStart = params['time-period'].startTime;
 					const timeStop =  params['time-period'].endTime;
@@ -112,12 +94,12 @@ async function talk(conv, params){
 						if(!error){
 							const responseText = `${activity.name} is record from ${timeStart} to ${timeStop}`;
 							response = responseText;
-							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.TIME_PERIOD);
+							db.insertRowsAsStream(conv, responseText, timeStart, timeStop, RECORD_TYPES.TIME_PERIOD);
 
 						}else{
 							const responseText = `Cannot upload ${activity.name}`;
 							response = responseText;
-							db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
+							db.insertRowsAsStream(conv, timeStart, timeStop, responseText, RECORD_TYPES.FALLBACK);
 
 						}
 					});
@@ -129,39 +111,64 @@ async function talk(conv, params){
 					if(recording === undefined) {
 
 						const uuid = uuidv4();
-						const timeStart =  moment().tz('Asia/Tokyo').format();
+						let timeStart =  moment().tz('Asia/Tokyo').format();
+
+						if(params['time-start']){
+							timeStart = params['time-start'];
+							if(!moment(timeStart).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
+								timeStart = moment(timeStart).subtract(1, 'days').tz('Asia/Tokyo').format()
+							}
+						}
+						
 						let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
 						conv.user.storage.activities.push(startActivity);
 		
 						const responseText = `${activity.name} is started`;
 						response = responseText;
-						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.START_RECORD);
+						db.insertRowsAsStream(conv, responseText, timeStart, null, RECORD_TYPES.START_RECORD);
 
 					}else{
-						const responseText = `Sorry! ${activity.name} is recording`;
-						response = responseText;
-						db.insertRowsAsStream(conv, responseText, RECORD_TYPES.RECORDING);
+					
+						let timeStart = moment().tz('Asia/Tokyo').format();
+						if(params['time-start']){
+							timeStart = params['time-start'];
+							if(!moment(timeStart).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
+								timeStart = moment(timeStart).subtract(1, 'days').tz('Asia/Tokyo').format()
+							}
+						}
 
+						if(moment(timeStart).isAfter(recording.timestamp)){
+							/** future activity */
+							const responseText = `${activity.name} is recording`;
+							response = responseText;
+							db.insertRowsAsStream(conv, responseText, timeStart, null, RECORD_TYPES.RECORDING);
+						
+						}else{
+							/** past activity */
+							const uuid = uuidv4();								
+							let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
+							conv.user.storage.startActivity = startActivity;
+							conv.user.storage.isFollowup = true;
+
+							const responseText = `When you have finished work?`;
+							response = responseText;
+							db.insertRowsAsStream(conv, responseText, timeStart, null, RECORD_TYPES.TIME_START);
+						}
+						
 					}
 
 				}
-				
-
+			
 			}else{
-
-				const responseText = `No acivity ${params['activity']} in DB`;
-				response = responseText;
-				db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
-
-
+				const responseText = `Sorry, could you say that again?`;
+				conv.ask(responseText);
+				db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.FALLBACK);
 			}
 
-		
-	
 	}else{
 		const responseText = `Please login with ${eneact.API} account, by saying \'login\'`;
 		response = responseText;
-		db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
+		db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.FALLBACK);
 
 	}	
 
@@ -181,53 +188,98 @@ app.intent('stop', async (conv, params) => {
 
 		let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
 		if(recording === undefined) {
-			const responseText = `You have not stated ${activity.name} yet`;
+			const responseText = `You have not started ${activity.name} yet`;
 			conv.ask(responseText);
+			db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.FALLBACK);
+			
 		}else{
 
-			const timeStop =  moment().tz('Asia/Tokyo').format()
-			let stopActivity = {id: activity.id, name: activity.name, uuid: recording.uuid, timestamp: timeStop}
-
-			await eneact.upload(user, recording, stopActivity, (error) => {			
-				if(!error){
-					conv.user.storage.activities = _.pullAllWith(conv.user.storage.activities, [recording], _.isEqual);
-					const responseText = `${activity.name} is stopped`;
-					conv.ask(responseText);
-					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.STOP_RECORD);
-				}else{
-					const responseText = `Cannot upload ${activity.name}`;
-					conv.ask(responseText);
-					db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
+			let timeStop = moment().tz('Asia/Tokyo').format();
+			if(params['time-stop']){
+				timeStop = params['time-stop'];
+				if(!moment(timeStop).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
+					timeStop = moment(timeStart).subtract(1, 'days').tz('Asia/Tokyo').format()
 				}
-			});
+			}
+			
+			if(moment(timeStop).isAfter(recording.timestamp)){
+				/** time start before time stop */
+				let stopActivity = {id: activity.id, name: activity.name, uuid: recording.uuid, timestamp: timeStop}
+				await eneact.upload(user, recording, stopActivity, (error) => {			
+					if(!error){
+						conv.user.storage.activities = _.pullAllWith(conv.user.storage.activities, [recording], _.isEqual);
+						const responseText = `${activity.name} is stopped`;
+						conv.ask(responseText);
+						db.insertRowsAsStream(conv, responseText, recording.timestamp, timeStop, RECORD_TYPES.STOP_RECORD);
+					}else{
+						const responseText = `Cannot upload ${activity.name}`;
+						conv.ask(responseText);
+						db.insertRowsAsStream(conv, responseText, null,null, RECORD_TYPES.FALLBACK);
+					}
+				});
+			
+			}else{
+
+				const start = moment(recording.timestamp).tz('Asia/Tokyo').format("hh:mm:ss a");
+				const stop = moment(timeStop).tz('Asia/Tokyo').format("hh:mm:ss a");
+				const responseText = `Start time ${start} must be earlier than end time ${stop}`;
+				conv.ask(responseText);
+				db.insertRowsAsStream(conv, responseText, recording.timestamp, timeStop, RECORD_TYPES.FALLBACK);
+			}
 			
 		}
 	}else{
-
-		const responseText = `No acivity ${params['activity']} in DB`;
+		const responseText = `Sorry, could you say that again?`;
 		conv.ask(responseText);
+		db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.FALLBACK);
 	}
 
 });
 
 app.intent('time-stop', async (conv, params) => {
+	
+	if(conv.user.storage.isFollowup){
 		
-	const timeStop =  params['time-stop'];
-	const user = conv.user.storage.user;
-	const activity = conv.user.storage.startActivity;
-	let stopActivity = {id: activity.id, name: activity.name, uuid: activity.uuid, timestamp: timeStop}
-
-	await eneact.upload(user, activity, stopActivity, (error) => {			
-		if(!error){
-			const responseText = `${activity.name} is record from ${activity.timestamp} to ${timeStop}`;
-			conv.ask(responseText);
-			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.TIME_STOP);
-		}else{
-			const responseText = `Cannot upload ${activity.name}`;
-			conv.ask(responseText);
-			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
+		let timeStop =  params['time-stop'];
+		if(!moment(timeStop).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
+			timeStop = moment(timeStart).subtract(1, 'days').tz('Asia/Tokyo').format()
 		}
-	});
+
+		if(moment(timeStop).isAfter(activity.timestamp)){
+			/** time start before time stop */
+			const user = conv.user.storage.user;
+			const activity = conv.user.storage.startActivity;
+			let stopActivity = {id: activity.id, name: activity.name, uuid: activity.uuid, timestamp: timeStop}
+	
+			await eneact.upload(user, activity, stopActivity, (error) => {			
+				if(!error){
+					const responseText = `${activity.name} is record from ${activity.timestamp} to ${timeStop}`;
+					conv.ask(responseText);
+					db.insertRowsAsStream(conv, responseText, activity.timestamp, timeStop, RECORD_TYPES.TIME_STOP);
+				}else{
+					const responseText = `Cannot upload ${activity.name}`;
+					conv.ask(responseText);
+					db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.FALLBACK);
+				}
+			});
+		}else{
+			const start = moment(activity.timestamp).tz('Asia/Tokyo').format("HH:mm:ss a");
+			const stop = moment(timeStop).tz('Asia/Tokyo').format("HH:mm:ss a");
+			const responseText = `Start time ${start} must be earlier than end time ${stop}`;
+			conv.ask(responseText);
+			db.insertRowsAsStream(conv, responseText, start, stop, RECORD_TYPES.FALLBACK);
+
+		}
+			
+		
+
+	}else{
+		const responseText = `I haven't received the record yet. Can you record again?`;
+		conv.ask(responseText);
+		db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.FALLBACK);
+	}
+
+	conv.user.storage.isFollowup = false;
 
 })
 
@@ -250,7 +302,7 @@ app.intent('fallback', async (conv, params) => {
 
 	const responseText = _.sample(responses);
 	conv.ask(responseText);
-	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
+	db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.FALLBACK);
 
 });
 
@@ -262,7 +314,8 @@ app.intent('show', async (conv, params) => {
 
 		if(conv.user.storage.activities.length > 0){
 			conv.user.storage.activities.forEach(activity => {
-				response += "activity: " + activity.name + " \n\n" + "time: " + activity.timestamp + " \n\n"
+				response += `Activity: ${activity.name}\n\n
+				Time: ${moment(activity.timestamp).tz('Asia/Tokyo').format("HH:mm:ss a")}\n\n`
 			});;
 		}else{
 			response = "No activity is recording"
@@ -272,7 +325,7 @@ app.intent('show', async (conv, params) => {
 
 	const responseText = response;
 	conv.ask(responseText);
-	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.SHOW);
+	db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.SHOW);
 });
 
 
@@ -291,12 +344,12 @@ app.intent('login', async (conv, params) => {
 
 			const responseText = `Hi! ${conv.user.storage.name}`;
 			conv.ask(responseText);
-			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.LOGIN);
+			db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.LOGIN);
 
 		}else{
 			const responseText = `${error}`;
 			conv.ask(responseText);
-			db.insertRowsAsStream(conv, responseText, RECORD_TYPES.FALLBACK);
+			db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.FALLBACK);
 		}
 
 	});
@@ -307,7 +360,7 @@ app.intent('logout', async (conv, params) => {
 	conv.user.storage = {};
 	const responseText = `You have successfully signed out of your ${API} account.`;
 	conv.ask(responseText);
-	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.LOGIN);
+	db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.LOGIN);
 
 });
 
@@ -315,7 +368,7 @@ app.intent('clear', async (conv, params) => {
 	conv.user.storage.activities = {};
 	const responseText = `Clear local storage`;
 	conv.ask(responseText);
-	db.insertRowsAsStream(conv, responseText, RECORD_TYPES.CLEAR);
+	db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.CLEAR);
 
 });
 
@@ -327,13 +380,15 @@ expressApp.post('/fulfillment', app);
 expressApp.get('/', async (req, res) => {
 	const result = await db.getActivity();
 	res.send(result)
+	console.log(result );
 });
 
 expressApp.get('/load_json', (req, res) => {
 	db.loadJSONFromGCSAutodetect();
 	res.send(`loadJSONFromGCSAutodetect`);
 })
-	
+
+
 const httpServer = http.createServer(expressApp);
 const httpsServer = https.createServer(credentials, expressApp);
 const httpPort = 80;

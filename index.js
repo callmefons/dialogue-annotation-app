@@ -86,24 +86,33 @@ async function talk(conv, params){
 					const uuid = uuidv4();
 					const timeStart = params['time-period'].startTime;
 					const timeStop =  params['time-period'].endTime;
+					const start = moment(timeStart).tz('Asia/Tokyo').format("hh:mm:ss a");
+					const stop = moment(timeStop).tz('Asia/Tokyo').format("hh:mm:ss a");
 
-					let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
-					let stopActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStop}
+					if(moment(timeStop).isAfter(timeStart)){
+						let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
+						let stopActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStop}
 
-					await eneact.upload(user, startActivity, stopActivity, (error)=> {			
-						if(!error){
-							const responseText = `${activity.name} is record from ${timeStart} to ${timeStop}`;
-							response = responseText;
-							db.insertRowsAsStream(conv, responseText, timeStart, timeStop, RECORD_TYPES.TIME_PERIOD);
+						await eneact.upload(user, startActivity, stopActivity, (error)=> {			
+							if(!error){
+								const responseText = `${activity.name} is record from ${start} to ${stop}`;
+								response = responseText;
+								db.insertRowsAsStream(conv, responseText, timeStart, timeStop, RECORD_TYPES.TIME_PERIOD);
+	
+							}else{
+								const responseText = `Cannot upload ${activity.name}`;
+								response = responseText;
+								db.insertRowsAsStream(conv, timeStart, timeStop, responseText, RECORD_TYPES.FALLBACK);
+	
+							}
+						});
+					}else{
+						const responseText = `Start time ${start} must be earlier than end time ${stop}`;
+						response = responseText;
+						db.insertRowsAsStream(conv, responseText, timeStart, timeStop, RECORD_TYPES.FALLBACK);
 
-						}else{
-							const responseText = `Cannot upload ${activity.name}`;
-							response = responseText;
-							db.insertRowsAsStream(conv, timeStart, timeStop, responseText, RECORD_TYPES.FALLBACK);
+					}
 
-						}
-					});
-					
 				
 				}else{
 
@@ -119,11 +128,12 @@ async function talk(conv, params){
 								timeStart = moment(timeStart).subtract(1, 'days').tz('Asia/Tokyo').format()
 							}
 						}
-						
+
+						const start = moment(timeStart).tz('Asia/Tokyo').format("hh:mm:ss a");
 						let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
 						conv.user.storage.activities.push(startActivity);
 		
-						const responseText = `${activity.name} is started`;
+						const responseText = `${activity.name} is started at ${start}`;
 						response = responseText;
 						db.insertRowsAsStream(conv, responseText, timeStart, null, RECORD_TYPES.START_RECORD);
 
@@ -161,7 +171,7 @@ async function talk(conv, params){
 			
 			}else{
 				const responseText = `Sorry, could you say that again?`;
-				conv.ask(responseText);
+				response = responseText;
 				db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.FALLBACK);
 			}
 
@@ -184,7 +194,11 @@ app.intent('stop', async (conv, params) => {
 	if(activityResult.length > 0){
 
 		const user = conv.user.storage.user;
-		const activity = conv.user.storage.activity;
+
+		const activity = {
+			id: activityResult[0].id,
+			name: activityResult[0].activity,
+		};
 
 		let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
 		if(recording === undefined) {
@@ -198,17 +212,18 @@ app.intent('stop', async (conv, params) => {
 			if(params['time-stop']){
 				timeStop = params['time-stop'];
 				if(!moment(timeStop).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
-					timeStop = moment(timeStart).subtract(1, 'days').tz('Asia/Tokyo').format()
+					timeStop = moment(timeStop).subtract(1, 'days').tz('Asia/Tokyo').format()
 				}
 			}
 			
+			const stop = moment(timeStop).tz('Asia/Tokyo').format("hh:mm:ss a");
 			if(moment(timeStop).isAfter(recording.timestamp)){
 				/** time start before time stop */
 				let stopActivity = {id: activity.id, name: activity.name, uuid: recording.uuid, timestamp: timeStop}
 				await eneact.upload(user, recording, stopActivity, (error) => {			
 					if(!error){
 						conv.user.storage.activities = _.pullAllWith(conv.user.storage.activities, [recording], _.isEqual);
-						const responseText = `${activity.name} is stopped`;
+						const responseText = `${activity.name} is stopped at ${stop}`;
 						conv.ask(responseText);
 						db.insertRowsAsStream(conv, responseText, recording.timestamp, timeStop, RECORD_TYPES.STOP_RECORD);
 					}else{
@@ -242,18 +257,21 @@ app.intent('time-stop', async (conv, params) => {
 		
 		let timeStop =  params['time-stop'];
 		if(!moment(timeStop).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
-			timeStop = moment(timeStart).subtract(1, 'days').tz('Asia/Tokyo').format()
+			timeStop = moment(timeStop).subtract(1, 'days').tz('Asia/Tokyo').format()
 		}
+
+		const activity = conv.user.storage.startActivity;
+		const start = moment(activity.timestamp).tz('Asia/Tokyo').format("HH:mm:ss a");
+		const stop = moment(timeStop).tz('Asia/Tokyo').format("HH:mm:ss a");
 
 		if(moment(timeStop).isAfter(activity.timestamp)){
 			/** time start before time stop */
 			const user = conv.user.storage.user;
-			const activity = conv.user.storage.startActivity;
 			let stopActivity = {id: activity.id, name: activity.name, uuid: activity.uuid, timestamp: timeStop}
 	
 			await eneact.upload(user, activity, stopActivity, (error) => {			
 				if(!error){
-					const responseText = `${activity.name} is record from ${activity.timestamp} to ${timeStop}`;
+					const responseText = `${activity.name} is record from ${start} to ${stop}`;
 					conv.ask(responseText);
 					db.insertRowsAsStream(conv, responseText, activity.timestamp, timeStop, RECORD_TYPES.TIME_STOP);
 				}else{
@@ -263,15 +281,12 @@ app.intent('time-stop', async (conv, params) => {
 				}
 			});
 		}else{
-			const start = moment(activity.timestamp).tz('Asia/Tokyo').format("HH:mm:ss a");
-			const stop = moment(timeStop).tz('Asia/Tokyo').format("HH:mm:ss a");
 			const responseText = `Start time ${start} must be earlier than end time ${stop}`;
 			conv.ask(responseText);
-			db.insertRowsAsStream(conv, responseText, start, stop, RECORD_TYPES.FALLBACK);
+			db.insertRowsAsStream(conv, responseText, activity.timestamp, timeStop, RECORD_TYPES.FALLBACK);
 
 		}
 			
-		
 
 	}else{
 		const responseText = `I haven't received the record yet. Can you record again?`;

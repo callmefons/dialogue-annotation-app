@@ -34,6 +34,7 @@ const RECORD_TYPES = {
 	RECORDING: 'recording',
 	STOP_RECORD: 'stop',
 	SHOW: 'show',
+	SHOW_ACT_TYPE: 'show_activity_types',
 	LOGIN: 'login',
 	CLEAR: 'clear',
 	FALLBACK: 'fallback',
@@ -341,6 +342,22 @@ app.intent('show', async (conv, params) => {
 	const responseText = response;
 	conv.ask(responseText);
 	db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.SHOW);
+});
+
+app.intent('show_activity_types', async (conv, params) => {
+	
+	let response = "";
+
+	const activityResult = await db.getActivities();
+	
+	activityResult.forEach((activity) => {
+		response += `${activity.name}\n\n`
+	})
+	
+	const responseText = response;
+	conv.ask(responseText);
+	db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.SHOW_ACT_TYPE);
+
 });
 
 

@@ -60,6 +60,22 @@ async function getActivity(activity) {
 	return rows;
 }
 
+async function getActivities() {
+
+	const query = `SELECT * FROM \`activity_dataset.activity_table\``;
+
+	const options = {query: query};
+
+	// Run the query as a job
+	const [job] = await bigqueryClient.createQueryJob(options);
+	console.log(`Job ${job.id} started.`);
+
+	// Wait for the query to finish
+  const [rows] = await job.getQueryResults();
+
+	return rows;
+}
+
 async function insertRowsAsStream(conv, responseText, timeStart = null, timeStop = null, recordType) {
 
   const datasetId = `reports`;
@@ -81,8 +97,6 @@ async function insertRowsAsStream(conv, responseText, timeStart = null, timeStop
   };
 
   console.log(logInput);
-  console.log(conv.input)
-
 
   let errors = await bigqueryClient.dataset(datasetId).table(tableId).insert([logInput]);
  
@@ -98,5 +112,6 @@ async function insertRowsAsStream(conv, responseText, timeStart = null, timeStop
 module.exports = {
     insertRowsAsStream: insertRowsAsStream,
     loadJSONFromGCSAutodetect: loadJSONFromGCSAutodetect,
-    getActivity: getActivity
+    getActivity: getActivity,
+    getActivities: getActivities
   };

@@ -4,12 +4,13 @@ const moment = require('moment');
 const uuidv4 = require('uuid/v4');
 const requestPromise = require('request-promise-native').defaults({ simple: false });
 
-const API = 'https://bigact.sozolab.jp/';
+const API = 'https://fahact.sozolab.jp/';
 const loginAPI = `${API}login`;
 const logoutAPI = `${API}logout`;
 const uploadAPI = `${API}sensors/0/upload`
 const getSelfAPI = `${API}users/self.json`;
 const getActivityAPI = `${API}activity_types.json`
+var _ = require('lodash');
 
 const db = require('./db');
 
@@ -65,7 +66,6 @@ function login(user, callback){
 }
 
 
-
 async function upload(user, startActivity, stopActivity, callback){
 
     const loginOptions = {uri: loginAPI,jar: j,method: "POST",json: true,body: {login: user.email, password: user.password}, resolveWithFullResponse: true};
@@ -83,7 +83,8 @@ async function upload(user, startActivity, stopActivity, callback){
         const time = date.getTime();
         const rand = Math.floor(Math.random() * 100000);
         const filename =  `${type}_${time}_${rand}.csv`;
-        
+
+
         let startBody = {
             filename: filename, type: type, version: version, 
             data: `${startActivity.timestamp},${startActivity.id},${startActivity.name},true,${user.id};,${startActivity.uuid},`
@@ -94,7 +95,6 @@ async function upload(user, startActivity, stopActivity, callback){
         .then( startRes => {
             
             console.log(`startRes.statusCode ${startRes.statusCode}`);
-
             let stopBody = {
                 filename: filename, type: type, version: version, 
                 data: `${stopActivity.timestamp},${stopActivity.id},${stopActivity.name},false,${user.id};,${stopActivity.uuid},`

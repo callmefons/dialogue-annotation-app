@@ -41,13 +41,34 @@ async function loadJSONFromGCSAutodetect() {
     throw errors;
   }
 }
+var _ = require('lodash');
+
+listOfActs = [
+  { 'server_name': 'WALKING',  'act_name': 'walking'},
+  { 'server_name': 'RUNNING',  'act_name': 'running'},
+  { 'server_name': 'CYCLING',  'act_name': 'cycling'},
+  { 'server_name': 'IN_VEHICLE',  'act_name': 'vehicle'},
+  { 'server_name': 'SITTING',  'act_name': 'sitting'},
+  { 'server_name': 'STANDING',  'act_name': 'standing'},
+  { 'server_name': 'LYING',  'act_name': 'lying'},
+  { 'server_name': 'DOWNSTAIRS',  'act_name': 'downstairs'},
+  { 'server_name': 'UNKNOWN',  'act_name': 'unknow'},
+  { 'server_name': 'UPSTAIRS',  'act_name': 'upstairs'},
+  { 'server_name': 'ON_TRAIN',  'act_name': 'train'},
+  { 'server_name': 'CARRYING',  'act_name': 'carrying'},
+  { 'server_name': 'PHONE',  'act_name': 'phone'}
+
+]
 
 async function getActivity(activity) {
 
-	const query = `SELECT a.id, a.name AS activity, r.name AS questions
-	FROM \`activity_dataset.activity_table\` AS a, UNNEST(record_types) AS r
-	WHERE a.name = \'${activity}\'`;
+  const activity_name = _.find(listOfActs, {'act_name': activity}).server_name;
 
+	// const query = `SELECT a.id, a.name AS activity, r.name AS questions
+	// FROM \`activity_dataset.activity_table\` AS a, UNNEST(record_types) AS r
+  // WHERE a.name = \'${activity}\'`;
+  const query = `SELECT * FROM \`activity_dataset.activity_table\` WHERE name = \'${activity_name}\'`;
+  
 	const options = {query: query};
 
 	// Run the query as a job

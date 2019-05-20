@@ -76,7 +76,7 @@ async function talk(conv, params){
 
 				const activity = {
 					id: activityResult[0].id,
-					name: activityResult[0].activity,
+					name: activityResult[0].name,
 				};
 
 				conv.user.storage.user = user;
@@ -209,10 +209,11 @@ app.intent('stop', async (conv, params) => {
 
 		const activity = {
 			id: activityResult[0].id,
-			name: activityResult[0].activity,
+			name: activityResult[0].name,
 		};
 
 		let recording = _.find(conv.user.storage.activities, { 'name': activity.name});
+
 		if(recording === undefined) {
 			const responseText = `You have not started ${activity.name} yet`;
 			conv.ask(responseText);
@@ -395,7 +396,7 @@ app.intent('login', async (conv, params) => {
 			conv.user.storage.email = userSelf.email;
 			conv.user.storage.password = userSelf.password;
 
-			const responseText = `Hi! ${conv.user.storage.name}`;
+			const responseText = `Hi! ${conv.user.storage.name} from ${eneact.API}`;
 			conv.ask(responseText);
 			db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.LOGIN);
 
@@ -411,14 +412,14 @@ app.intent('login', async (conv, params) => {
 
 app.intent('logout', async (conv, params) => {
 	conv.user.storage = {};
-	const responseText = `You have successfully signed out of your ${API} account.`;
+	const responseText = `You have successfully signed out of your ${eneact.API} account.`;
 	conv.ask(responseText);
 	db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.LOGIN);
 
 });
 
 app.intent('clear', async (conv, params) => {
-	conv.user.storage.activities = {};
+	conv.user.storage.activities = [];
 	const responseText = `Clear local storage`;
 	conv.ask(responseText);
 	db.insertRowsAsStream(conv, responseText, null, null, RECORD_TYPES.CLEAR);

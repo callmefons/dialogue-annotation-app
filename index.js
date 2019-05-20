@@ -121,14 +121,20 @@ async function talk(conv, params){
 					if(recording === undefined) {
 
 						const uuid = uuidv4();
-						let timeStart =  moment().tz('Asia/Tokyo').format();
+						let timeStart = moment().tz('Asia/Tokyo').format();
 
 						if(params['time-start']){
 							timeStart = params['time-start'];
-							if(!moment(timeStart).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
+
+							dayTimeStart = moment(timeStart).tz('Asia/Tokyo').format("YMMDD");
+							today = moment().tz('Asia/Tokyo').format("YMMDD");
+
+							if(dayTimeStart != today){
 								timeStart = moment(timeStart).subtract(1, 'days').tz('Asia/Tokyo').format()
 							}
 						}
+
+						console.log("timeStart " + timeStart);
 
 						const start = moment(timeStart).tz('Asia/Tokyo').format("hh:mm:ss a");
 						let startActivity = {id: activity.id, name: activity.name, uuid: uuid, timestamp: timeStart}
@@ -143,9 +149,14 @@ async function talk(conv, params){
 						let timeStart = moment().tz('Asia/Tokyo').format();
 						if(params['time-start']){
 							timeStart = params['time-start'];
-							if(!moment(timeStart).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
+							dayTimeStart = moment(timeStart).tz('Asia/Tokyo').format("YMMDD");
+							today = moment().tz('Asia/Tokyo').format("YMMDD");
+							if(dayTimeStart != today){
 								timeStart = moment(timeStart).subtract(1, 'days').tz('Asia/Tokyo').format()
 							}
+							// if(!moment(timeStart).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
+							// 	timeStart = moment(timeStart).subtract(1, 'days').tz('Asia/Tokyo').format();
+							// }
 						}
 
 						if(moment(timeStart).isAfter(recording.timestamp)){
@@ -212,9 +223,14 @@ app.intent('stop', async (conv, params) => {
 			let timeStop = moment().tz('Asia/Tokyo').format();
 			if(params['time-stop']){
 				timeStop = params['time-stop'];
-				if(!moment(timeStop).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
+				dayTimeStop = moment(timeStop).tz('Asia/Tokyo').format("YMMDD");
+				today = moment().tz('Asia/Tokyo').format("YMMDD");
+				if(dayTimeStop != today){
 					timeStop = moment(timeStop).subtract(1, 'days').tz('Asia/Tokyo').format()
 				}
+				// if(!moment(timeStop).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
+				// 	timeStop = moment(timeStop).subtract(1, 'days').tz('Asia/Tokyo').format()
+				// }
 			}
 			
 			const stop = moment(timeStop).tz('Asia/Tokyo').format("hh:mm:ss a");
@@ -257,9 +273,14 @@ app.intent('time-stop', async (conv, params) => {
 	if(conv.user.storage.isFollowup){
 		
 		let timeStop =  params['time-stop'];
-		if(!moment(timeStop).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
+		dayTimeStop = moment(timeStop).tz('Asia/Tokyo').format("YMMDD");
+		today = moment().tz('Asia/Tokyo').format("YMMDD");
+		if(dayTimeStop != today){
 			timeStop = moment(timeStop).subtract(1, 'days').tz('Asia/Tokyo').format()
 		}
+		// if(!moment(timeStop).isSame(moment().tz('Asia/Tokyo').format(), 'day')){
+		// 	timeStop = moment(timeStop).subtract(1, 'days').tz('Asia/Tokyo').format()
+		// }
 
 		const activity = conv.user.storage.startActivity;
 		const start = moment(activity.timestamp).tz('Asia/Tokyo').format("HH:mm:ss a");
@@ -410,9 +431,14 @@ expressApp.use(bodyParser.json());
 expressApp.post('/fulfillment', app);
 
 expressApp.get('/', async (req, res) => {
-	const result = await db.getActivity();
-	res.send(result)
-	console.log(result );
+	// const result = await db.getActivity();
+	// res.send(result)
+	// console.log(result );
+
+	// let timeStart = "2019-05-21T08:00:00+09:00";
+	// console.log("params['time-start'] " + "2019-05-21T08:00:00+09:00");
+	// console.log("moment().tz('Asia/Tokyo').format() "  + moment().tz('Asia/Tokyo').format())
+	// console.log('momnet ' + moment(timeStart).isSame(moment().tz('Asia/Tokyo').format(), 'day'));
 });
 
 expressApp.get('/load_json', (req, res) => {
